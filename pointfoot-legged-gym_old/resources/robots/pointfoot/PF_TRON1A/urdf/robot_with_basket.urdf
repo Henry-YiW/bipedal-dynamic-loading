@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="point_foot_tron1a_with_basket" xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- Materials -->
+    <material name="black">
+        <color rgba="0.0 0.0 0.0 1.0"/>
+    </material>
+    <material name="blue">
+        <color rgba="0.0 0.0 0.8 1.0"/>
+    </material>
+    <material name="green">
+        <color rgba="0.0 0.8 0.0 1.0"/>
+    </material>
+    <material name="grey">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+    </material>
+    <material name="silver">
+        <color rgba="0.9137254901960784 0.9137254901960784 0.8470588235294118 1.0"/>
+    </material>
+    <material name="orange">
+        <color rgba="1.0 0.4235294117647059 0.0392156862745098 1.0"/>
+    </material>
+    <material name="brown">
+        <color rgba="0.8705882352941177 0.8117647058823529 0.7647058823529411 1.0"/>
+    </material>
+    <material name="red">
+        <color rgba="0.8 0.0 0.0 1.0"/>
+    </material>
+    <material name="white">
+        <color rgba="1.0 1.0 1.0 1.0"/>
+    </material>
+
+    <!-- Include original PF_TRON1A robot description -->
+    <!-- Assuming robot.urdf is in the same directory and defines the base robot -->
+    <xacro:include filename="robot.urdf"/>
+
+    <!-- Add contact plate (base platform) -->
+    <link name="contact_plate">
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="0.1"/> <!-- Small mass for the plate -->
+            <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/> <!-- Minimal inertia -->
+        </inertial>
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <!-- Adjust size as needed for PF_TRON1A base -->
+                <box size="0.3 0.2 0.01"/> 
+            </geometry>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <!-- Adjust size as needed for PF_TRON1A base -->
+                <box size="0.3 0.2 0.01"/> 
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- Attach contact plate to base_Link -->
+    <joint name="base_to_contact_plate" type="fixed" dont_collapse="true">
+        <parent link="base_Link"/> <!-- Parent is the base link of PF_TRON1A -->
+        <child link="contact_plate"/>
+        <!-- Adjust origin xyz to place plate correctly on PF_TRON1A base_Link -->
+        <origin xyz="0 0 0.15" rpy="0 0 0"/> 
+    </joint>
+
+    <!-- Add container box (basket) -->
+    <link name="back_box">
+        <!-- Bottom Face (matches contact_plate) -->
+        <visual>
+            <origin xyz="0 0 0"/>
+            <geometry>
+                <box size="0.3 0.2 0.01"/>
+            </geometry>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0"/>
+            <geometry>
+                <box size="0.3 0.2 0.01"/>
+            </geometry>
+        </collision>
+
+        <!-- Left Face -->
+        <visual>
+            <origin xyz="0 0.105 0.025" rpy="0 0 0"/> <!-- Position relative to bottom face center -->
+            <geometry>
+                <box size="0.3 0.01 0.05"/> <!-- Width, Thickness, Height -->
+            </geometry>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0.105 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.3 0.01 0.05"/>
+            </geometry>
+        </collision>
+
+        <!-- Right Face -->
+        <visual>
+            <origin xyz="0 -0.105 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.3 0.01 0.05"/>
+            </geometry>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <origin xyz="0 -0.105 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.3 0.01 0.05"/>
+            </geometry>
+        </collision>
+
+        <!-- Front Face -->
+        <visual>
+            <origin xyz="0.155 0 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.2 0.05"/> <!-- Thickness, Width, Height -->
+            </geometry>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <origin xyz="0.155 0 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.2 0.05"/>
+            </geometry>
+        </collision>
+
+        <!-- Back Face -->
+        <visual>
+            <origin xyz="-0.155 0 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.2 0.05"/>
+            </geometry>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <origin xyz="-0.155 0 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.2 0.05"/>
+            </geometry>
+        </collision>
+
+        <!-- Inertial properties for the box -->
+        <inertial>
+            <mass value="0.1"/> <!-- Small mass for the box -->
+            <origin xyz="0 0 0.025"/> <!-- Approximate center -->
+            <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/> <!-- Minimal inertia -->
+        </inertial>
+    </link>
+
+    <!-- Joint to attach the container box to the contact plate -->
+    <joint name="contact_plate_to_back_box" type="fixed" dont_collapse="true">
+        <parent link="contact_plate"/>
+        <child link="back_box"/>
+        <origin xyz="0 0 0.01" rpy="0 0 0"/> <!-- Place box bottom slightly above plate surface -->
+    </joint>
+
+</robot> 
