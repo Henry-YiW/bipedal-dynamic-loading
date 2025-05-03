@@ -559,7 +559,7 @@
     <!-- Parent is the base link of PF_TRON1A -->
     <child link="contact_plate"/>
     <!-- Adjust origin xyz to place plate correctly on PF_TRON1A base_Link -->
-    <origin rpy="0 0 0" xyz="0 0 0.15"/>
+    <origin rpy="0 0 0" xyz="0 0 0.02"/>
   </joint>
   <!-- Add container box (basket) -->
   <link name="back_box">
