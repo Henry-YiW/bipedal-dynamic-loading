@@ -158,6 +158,41 @@ class BaseTask:
     def step(self, actions):
         raise NotImplementedError
 
+
+    def visualize_contact_forces(self, scale=0.001, threshold=1e-3):
+        if self.viewer is None:
+            return
+
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+
+        starts = []
+        ends = []
+
+        for env_idx in range(self.num_envs):
+            for body_idx in range(self.num_bodies):
+                force = self.contact_forces[env_idx, body_idx]
+                norm = torch.norm(force).item()
+                if norm < threshold:
+                    continue
+
+                pos = self.rigid_body_state[env_idx, body_idx, 0:3]
+                start = pos.cpu().numpy()
+                end = (pos + scale * force).cpu().numpy()
+                starts.append(start)
+                ends.append(end)
+
+            if starts:  # Only call if there are any lines to draw
+                starts_np = np.array(starts, dtype=np.float32)
+                ends_np = np.array(ends, dtype=np.float32)
+                self.gym.add_lines(self.viewer, self.envs[env_idx], len(starts_np), starts_np, ends_np)
+
+
+
+
+
+
+
     def render(self, sync_frame_time=True):
         if self.viewer:
             # check for window closed
@@ -178,6 +213,8 @@ class BaseTask:
             # step graphics
             if self.enable_viewer_sync:
                 self.gym.step_graphics(self.sim)
+
+                # self.visualize_contact_forces()
                 self.gym.draw_viewer(self.viewer, self.sim, True)
                 if sync_frame_time:
                     self.gym.sync_frame_time(self.sim)
@@ -244,7 +281,10 @@ class BaseTask:
             > 10.0,
             dim=1,
         )
+        # print('self.fail_buf', self.fail_buf)
+        # print('fail_buf', fail_buf)
         fail_buf |= self.projected_gravity[:, 2] > -0.1
+        # print('fail_buf after projected_gravity', fail_buf)
         self.fail_buf += fail_buf
         self.time_out_buf = (
             self.episode_length_buf > self.max_episode_length
@@ -257,6 +297,12 @@ class BaseTask:
             self.edge_reset_buf |= self.base_position[:, 0] < self.terrain_x_min + 1
             self.edge_reset_buf |= self.base_position[:, 1] > self.terrain_y_max - 1
             self.edge_reset_buf |= self.base_position[:, 1] < self.terrain_y_min + 1
+        # print('fail_buf_pure', self.fail_buf)
+        # print('fail_buf_last', 
+        #     (self.fail_buf > self.cfg.env.fail_to_terminal_time_s / self.dt))
+        # print('time_out_buf', self.time_out_buf)
+        # print('edge_reset_buf', self.edge_reset_buf)
+        # print('power_limit_out_buf', self.power_limit_out_buf)
         self.reset_buf = (
             (self.fail_buf > self.cfg.env.fail_to_terminal_time_s / self.dt)
             | self.time_out_buf
@@ -688,9 +734,6 @@ class BaseTask:
         self.obs_scales = self.cfg.normalization.obs_scales
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
         self.command_ranges = class_to_dict(self.cfg.commands.ranges)
-        print("--------------------------------")
-        print("command_ranges in _parse_cfg:", self.command_ranges)
-        print("--------------------------------")
         if self.cfg.terrain.mesh_type not in ["heightfield", "trimesh"]:
             self.cfg.terrain.curriculum = False
         self.max_episode_length_s = self.cfg.env.episode_length_s
@@ -1064,26 +1107,14 @@ class BaseTask:
             -0.5, 0.5, (len(env_ids), self.num_dof), device=self.device
         )
         self.dof_vel[env_ids] = 0.0
-        print("--------------------------------")
-        print("env_ids in _reset_dofs:", env_ids)
-        print("--------------------------------")
+
         env_ids_int32 = env_ids.to(dtype=torch.int32)
-        print("--------------------------------")
-        print("env_ids_int32 in _reset_dofs after conversion:", env_ids_int32)
-        print("env_ids in _reset_dofs after conversion:", env_ids)
-        print("self.dof_state in _reset_dofs:", self.dof_state)
-        print("self.dof_state.shape in _reset_dofs:", self.dof_state.shape)
-        print("--------------------------------")
-       
         self.gym.set_dof_state_tensor_indexed(
             self.sim,
             gymtorch.unwrap_tensor(self.dof_state),
             gymtorch.unwrap_tensor(env_ids_int32),
             len(env_ids_int32),
         )
-        print("--------------------------------")
-        print("env_ids in _reset_dofs, after gym.set_dof_state_tensor_indexed:", env_ids)
-        print("--------------------------------")
     
     def set_camera(self, position, lookat):
         """Set camera position and direction"""
@@ -1143,7 +1174,6 @@ class BaseTask:
         self.episode_length_buf += 1
 
         # prepare quantities
-        print("self.root_states.shape in post_physics_step:", self.root_states.shape)
         self.base_quat[:] = self.root_states[:, 3:7]
         self.base_position = self.root_states[:, :3]
         self.base_lin_vel = (self.base_position - self.last_base_position) / self.dt
@@ -1167,9 +1197,6 @@ class BaseTask:
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_idx(env_ids)
-        print("--------------------------------")
-        print("env_ids in post_physics_step, right after reset_idx:", env_ids)
-        print("--------------------------------")
         self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions)
 
         self.last_actions[:, :, 1] = self.last_actions[:, :, 0]
@@ -1194,11 +1221,6 @@ class BaseTask:
         self.actions = target_pos / self.cfg.control.action_scale
         
     def compute_dof_vel(self):
-        print("--------------------------------")
-        print("self.dof_pos in compute_dof_vel:", self.dof_pos)
-        print("self.last_dof_pos in compute_dof_vel:", self.last_dof_pos)
-        print("self.pi in compute_dof_vel:", self.pi)
-        print("--------------------------------")
         diff = (
             torch.remainder(self.dof_pos - self.last_dof_pos + self.pi, 2 * self.pi)
             - self.pi
@@ -1409,8 +1431,6 @@ class BaseTask:
         self.rigid_body_external_torques = torch.zeros(
             (self.num_envs, self.num_bodies, 3), device=self.device, requires_grad=False
         )
-        print("self.base_quat.shape:", self.base_quat.shape)
-        print("self.gravity_vec.shape:", self.gravity_vec.shape)
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         self.base_height = torch.zeros_like(self.root_states[:, 2])
         if self.cfg.terrain.measure_heights or self.cfg.terrain.critic_measure_heights:

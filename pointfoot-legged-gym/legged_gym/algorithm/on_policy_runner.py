@@ -43,6 +43,9 @@ from .mlp_encoder import MLP_Encoder
 from .actor_critic import ActorCritic
 from legged_gym.envs.vec_env import VecEnv
 
+from torchviz import make_dot
+
+
 
 class OnPolicyRunner:
     def __init__(self, env: VecEnv, train_cfg, log_dir=None, device="cpu"):

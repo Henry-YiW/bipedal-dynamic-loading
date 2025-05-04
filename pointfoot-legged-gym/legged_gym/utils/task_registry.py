@@ -81,6 +81,7 @@ class TaskRegistry:
         return env_cfg, train_cfg
 
     def save_cfgs(self, name):
+        print('name', name)
         os.makedirs(self.log_dir)
 
         json_str = json.dumps(class_to_dict(self.env_cfgs[name]), indent=4)
@@ -100,6 +101,7 @@ class TaskRegistry:
         if save_items is not None:
             for save_item in save_items:
                 base_file_name = ntpath.basename(save_item)
+                print('base_file_name', base_file_name)
                 copyfile(save_item, self.log_dir + "/" + base_file_name)
 
     def make_env(self, name, args=None, env_cfg=None):

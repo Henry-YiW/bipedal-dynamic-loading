@@ -41,9 +41,6 @@ class BipedPF(BaseTask):
 
         self.init_done = False
         self._parse_cfg(self.cfg)
-        print("--------------------------------")
-        print("parse_cfg is called in BipedPF")
-        print("--------------------------------")
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
         self.pi = torch.acos(torch.zeros(1, device=self.device)) * 2
 
@@ -75,71 +72,18 @@ class BipedPF(BaseTask):
                 (self.actions.unsqueeze(1), self.action_fifo[:, :-1, :]), dim=1
             )
             self.envs_steps_buf += 1
-            print("self.action_fifo.shape:", self.action_fifo.shape)
-            print("max of self.action_delay_idx:", max(self.action_delay_idx))
-            print("min of self.action_delay_idx:", min(self.action_delay_idx))
-            print("self.action_fifo[0, :, 0]:", self.action_fifo[0, :, 0])
-            print("self.action_delay_idx.shape:", self.action_delay_idx.shape)
-            print("self.action_fifo[torch.arange(self.num_envs), self.action_delay_idx, :].shape:", self.action_fifo[torch.arange(self.num_envs), self.action_delay_idx, :].shape)
             self.torques = self._compute_torques(
                 self.action_fifo[torch.arange(self.num_envs), self.action_delay_idx, :]
             ).view(self.torques.shape)
-            
-            # --- PRE-SIMULATION DEBUG --- 
-            print("shape of self.envs_steps_buf:", self.envs_steps_buf.shape)
-            print("self.envs_steps_buf:", self.envs_steps_buf)
-            print("self.num_envs:", self.num_envs)
-            print(f"[DEBUG Step {self.envs_steps_buf[0].item() if self.num_envs > 0 else 'N/A'}] PRE-SIMULATE CHECKS:")
-            critical_tensors = {
-                # State just before simulate:
-                'root_states_in': self.root_states, 
-                'dof_state_in': self.dof_state, 
-                # Forces being applied:
-                'torques_applied': self.torques,
-                # Parameters:
-                'p_gains': self.p_gains,
-                'd_gains': self.d_gains,
-            }
-            found_invalid = False
-            for name, tensor in critical_tensors.items():
-                if tensor is None:
-                    print(f"  CRITICAL: Tensor '{name}' is None!")
-                    found_invalid = True
-                    continue
-                # Check for NaNs
-                nan_check = torch.isnan(tensor)
-                if nan_check.any():
-                    print(f"  CRITICAL: NaNs found in {name}! Shape: {tensor.shape}")
-                    # Print indices of NaNs if tensor is not too large
-                    if tensor.numel() < 1000:
-                         print(f"    NaN indices: {torch.where(nan_check)}")
-                    found_invalid = True
-                # Check for Infs
-                inf_check = torch.isinf(tensor)
-                if inf_check.any():
-                    print(f"  CRITICAL: Infs found in {name}! Shape: {tensor.shape}")
-                    if tensor.numel() < 1000:
-                         print(f"    Inf indices: {torch.where(inf_check)}")
-                    found_invalid = True
-            if not found_invalid:
-                 print("  No NaNs or Infs found in critical tensors before simulate.")
-            # --- END PRE-SIMULATION DEBUG --- 
-                
             self.gym.set_dof_actuation_force_tensor(
                 self.sim, gymtorch.unwrap_tensor(self.torques)
             )
             if self.cfg.domain_rand.push_robots:
                 self._push_robots()
-            # --- Simulate --- 
-            print("--> Simulating...")
             self.gym.simulate(self.sim)
-            print("<-- Simulation call done.")
-            # --- Post-Simulate Refresh --- 
             if self.device == "cpu":
                 self.gym.fetch_results(self.sim, True)
-            print("--> Refreshing DOF state...")
             self.gym.refresh_dof_state_tensor(self.sim)
-            print("<-- DOF state refresh done.")
             self.compute_dof_vel()
         self.post_physics_step()
 
@@ -285,9 +229,6 @@ class BipedPF(BaseTask):
         Args:
             env_ids (list[int]): List of environment ids which must be reset
         """
-        print("--------------------------------")
-        print("env_ids in reset_idx in pointfoot_flat.py:", env_ids)
-        print("--------------------------------")
         if len(env_ids) == 0:
             return
         # update curriculum
@@ -316,7 +257,6 @@ class BipedPF(BaseTask):
         self.reset_buf[env_ids] = 1
         self.obs_history[env_ids] = 0
         obs_buf, _ = self.compute_group_observations()
-        print("shape of obs_buf:", obs_buf.shape)
         self.obs_history[env_ids] = obs_buf[env_ids].repeat(1, self.obs_history_length)
         self.gait_indices[env_ids] = 0
         self.fail_buf[env_ids] = 0

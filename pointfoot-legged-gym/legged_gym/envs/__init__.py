@@ -34,7 +34,8 @@ from legged_gym import (
 )
 import os, sys
 from legged_gym.utils.task_registry import task_registry
-
+from legged_gym.envs.pointfoot_flat_load_balance.pointfoot_flat_load_balance import BipedPFBallBalance
+from legged_gym.envs.pointfoot_flat_load_balance.pointfoot_flat_load_balance_config import BipedBallBalanceCfg, BipedBallBalanceCfgPPO
 robot_type = os.getenv("ROBOT_TYPE")
 
 if not robot_type:
@@ -44,9 +45,7 @@ if not robot_type:
 if robot_type.startswith("PF"):
     if robot_type in ["PF_TRON1A", "PF_P441A", "PF_P441B", "PF_P441C", "PF_P441C2"]:
         from legged_gym.envs.pointfoot_flat.pointfoot_flat import BipedPF
-        from legged_gym.envs.pointfoot_flat.pointfoot_load_balance import BipedPFBallBalance
         from legged_gym.envs.pointfoot_flat.pointfoot_flat_config import BipedCfgPF, BipedCfgPPOPF
-        from legged_gym.envs.pointfoot_flat.pointfoot_load_balance_config import BipedBallBalanceCfg, BipedBallBalanceCfgPPO
         task_registry.register("pointfoot_flat", BipedPF, BipedCfgPF(), BipedCfgPPOPF())
         task_registry.register("pointfoot_flat_load_balance", BipedPFBallBalance, BipedBallBalanceCfg(), BipedBallBalanceCfgPPO())
     else:

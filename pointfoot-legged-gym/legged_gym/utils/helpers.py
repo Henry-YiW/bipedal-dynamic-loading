@@ -95,6 +95,9 @@ def parse_sim_params(args, cfg):
     elif args.physics_engine == gymapi.SIM_PHYSX:
         sim_params.physx.use_gpu = args.use_gpu
         sim_params.physx.num_subscenes = args.subscenes
+        sim_params.physx.contact_collection = gymapi.ContactCollection(1)
+        # sim_params.physx.contact_collection = gymapi.ContactCollection(2)
+        print('contact collection', sim_params.physx.contact_collection)
     sim_params.use_gpu_pipeline = args.use_gpu_pipeline
 
     # if sim options are provided in cfg, parse them and update/override above:

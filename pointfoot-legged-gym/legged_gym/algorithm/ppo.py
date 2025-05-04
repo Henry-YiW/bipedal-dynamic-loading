@@ -35,7 +35,7 @@ import torch.optim as optim
 from .mlp_encoder import MLP_Encoder
 from .actor_critic import ActorCritic
 from .rollout_storage import RolloutStorage
-
+from torchviz import make_dot
 
 class PPO:
     actor_critic: ActorCritic
@@ -132,6 +132,7 @@ class PPO:
         self.actor_critic.train()
 
     def act(self, obs, obs_history, commands, critic_obs):
+        # print('commands', commands)
         critic_obs = torch.cat((critic_obs, commands), dim=-1)
         # act
         encoder_out = self.encoder.encode(obs_history)
@@ -161,12 +162,15 @@ class PPO:
         self.transition.rewards = rewards.clone()
         self.transition.dones = dones
         # Bootstrapping on time outs
+        # print('self.gamma.shape', self.gamma.shape)
+        # print('infos time_outs shape', infos["time_outs"].shape)
         if "time_outs" in infos:
             self.transition.rewards += self.gamma * torch.squeeze(
                 self.transition.values
                 * infos["time_outs"].unsqueeze(1).to(self.device),
                 1,
             )
+            # print('self.transition.rewards', self.transition.rewards)
 
         # Record the transition
         self.transition.next_observations = next_obs
@@ -188,6 +192,8 @@ class PPO:
             self.num_mini_batches,
             self.num_learning_epochs,
         )
+
+        training_iteration = 0
         for (
             obs_batch,
             critic_obs_batch,
@@ -201,6 +207,7 @@ class PPO:
             old_mu_batch,
             old_sigma_batch,
         ) in generator:
+            # print('training_iteration', training_iteration)
             encoder_out_batch = self.encoder.encode(obs_history_batch)
             commands_batch = group_commands_batch
             self.actor_critic.act(
@@ -253,7 +260,10 @@ class PPO:
             ratio = torch.exp(
                 actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch)
             )
-            # print(ratio)
+            # print('ratio', ratio)
+            # print('advantages_batch', advantages_batch)
+            # print('old_actions_log_prob_batch', old_actions_log_prob_batch)
+            # print('actions_log_prob_batch', actions_log_prob_batch)
             surrogate = -torch.squeeze(advantages_batch) * ratio
             surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(
                 ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
@@ -286,15 +296,32 @@ class PPO:
 
             # Gradient step
             self.optimizer.zero_grad()
+            # print('logstd.grad', self.actor_critic.logstd.grad)
+            # # Build and render computation graph
+            # dot = make_dot(loss, params={"logstd": self.actor_critic.logstd})
+            # dot.render("compute_graph", format="pdf")  # generates compute_graph.pdf
+            # raise Exception("Stop here")
             loss.backward()
+            if self.actor_critic.logstd.grad is not None:
+                if torch.isnan(self.actor_critic.logstd.grad).any():
+                    print("💥 NaN detected in logstd.grad!")
+                    self.actor_critic.logstd.grad = torch.zeros_like(self.actor_critic.logstd.grad)
+                    # raise Exception("NaN detected in logstd.grad!")
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            if self.actor_critic.logstd.grad is not None:
+                if torch.isnan(self.actor_critic.logstd.grad).any():
+                    print("💥 NaN detected in logstd.grad 2!")
+                    self.actor_critic.logstd.grad = torch.zeros_like(self.actor_critic.logstd.grad)
             self.optimizer.step()
+            if torch.isnan(self.actor_critic.logstd).any():
+                print("💥 logstd became NaN AFTER optimizer step! Resetting...")
+                # raise Exception("logstd became NaN AFTER optimizer step!")
 
             num_updates += 1
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
             mean_kl += kl_mean.item()
-
+            training_iteration += 1
         num_updates_extra = 0
         mean_extra_loss = 0
         if self.extra_optimizer is not None:
