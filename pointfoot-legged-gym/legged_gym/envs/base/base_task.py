@@ -235,6 +235,8 @@ class BaseTask:
                 -self.cfg.rewards.clip_single_reward,
                 self.cfg.rewards.clip_single_reward,
             )
+            # print(f'{name} reward: {rew}')
+            # print(f'rew shape: {rew.shape}')
             self.rew_buf += rew
             self.episode_sums[name] += rew
         if self.cfg.rewards.only_positive_rewards:

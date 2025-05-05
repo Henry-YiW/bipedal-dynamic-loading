@@ -58,8 +58,9 @@ class BipedBallBalanceCfg(BipedCfgPF):
     class rewards(BipedCfgPF.rewards):
         class scales(BipedCfgPF.rewards.scales):
             # Preserve all locomotion rewards and add ball-specific ones
-            ball_balance = 1.0       # Weight for ball balancing reward
-            wrench_smoothness = 0.5  # Weight for force smoothness
+            # ball_balance = 1.0       # Weight for ball balancing reward
+            # wrench_smoothness = 0.5  # Weight for force smoothness
+            pass
 
     class terrain(BipedCfgPF.terrain):
         mesh_type = "plane"  # Default to plane for ball balancing

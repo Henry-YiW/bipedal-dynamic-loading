@@ -63,14 +63,18 @@ class BipedPF(BaseTask):
             rewards (torch.Tensor): Tensor of shape (num_envs)
             dones (torch.Tensor): Tensor of shape (num_envs)
         """
+        # To decide whether to use _action_clip or not
         self._action_clip(actions)
         # step physics and render each frame
         self.render()
+
+        # To decide whether to use pre_physics_step or not
         self.pre_physics_step()
         for _ in range(self.cfg.control.decimation):
             self.action_fifo = torch.cat(
                 (self.actions.unsqueeze(1), self.action_fifo[:, :-1, :]), dim=1
             )
+            # To decide whether to keep this because envs_steps_buf will be added in post_physics_step
             self.envs_steps_buf += 1
             self.torques = self._compute_torques(
                 self.action_fifo[torch.arange(self.num_envs), self.action_delay_idx, :]
@@ -78,12 +82,14 @@ class BipedPF(BaseTask):
             self.gym.set_dof_actuation_force_tensor(
                 self.sim, gymtorch.unwrap_tensor(self.torques)
             )
+            # To decide whether to do domain randomizations or not
             if self.cfg.domain_rand.push_robots:
                 self._push_robots()
             self.gym.simulate(self.sim)
             if self.device == "cpu":
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
+            # To decide whether to compute dof_vel or not
             self.compute_dof_vel()
         self.post_physics_step()
 
