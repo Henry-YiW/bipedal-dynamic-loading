@@ -46,8 +46,11 @@ if robot_type.startswith("PF"):
     if robot_type in ["PF_TRON1A", "PF_P441A", "PF_P441B", "PF_P441C", "PF_P441C2"]:
         from legged_gym.envs.pointfoot_flat.pointfoot_flat import BipedPF
         from legged_gym.envs.pointfoot_flat.pointfoot_flat_config import BipedCfgPF, BipedCfgPPOPF
+        from legged_gym.envs.pointfoot_flat.pointfoot_rough_config import PointFootRoughCfg, PointFootRoughCfgPPO
         task_registry.register("pointfoot_flat", BipedPF, BipedCfgPF(), BipedCfgPPOPF())
         task_registry.register("pointfoot_flat_load_balance", BipedPFBallBalance, BipedBallBalanceCfg(), BipedBallBalanceCfgPPO())
+    
+        task_registry.register("pointfoot_rough", BipedPF, PointFootRoughCfg(), PointFootRoughCfgPPO())
     else:
         print("\033[1m\033[31mError: Input ROBOT_TYPE={}".format(robot_type), 
         "is not among valid robot types PF_TRON1A, PF_P441A, PF_P441B, PF_P441C, PF_P441C2.\033[0m")

@@ -35,7 +35,7 @@ robot_type = os.getenv("ROBOT_TYPE")
 
 class BipedCfgPF(BaseConfig):
     class env:
-        num_envs = 8192
+        num_envs = 128
         num_observations = 30
         num_critic_observations = 3 + num_observations
         num_height_samples = 117
@@ -48,7 +48,7 @@ class BipedCfgPF(BaseConfig):
         fail_to_terminal_time_s = 0.5
 
     class terrain:
-        mesh_type = "plane"  # "heightfield" # none, plane, heightfield or trimesh
+        mesh_type = "trimesh"  # "heightfield" # none, plane, heightfield or trimesh
         horizontal_scale = 0.1  # [m]
         vertical_scale = 0.005  # [m]
         border_size = 25  # [m]

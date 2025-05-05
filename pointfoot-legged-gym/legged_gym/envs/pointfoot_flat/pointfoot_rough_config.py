@@ -2,7 +2,7 @@ from legged_gym.envs.base.base_config import BaseConfig
 
 class PointFootRoughCfg(BaseConfig):
     class env:
-        num_envs = 256
+        num_envs = 4096
         num_propriceptive_obs = 27
         num_privileged_obs = 148  # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 6
@@ -50,6 +50,19 @@ class PointFootRoughCfg(BaseConfig):
             ang_vel_yaw = [-1, 1]  # min max [rad/s]
             heading = [-3.14, 3.14]
 
+    class gait:
+        num_gait_params = 4
+        resampling_time = 5  # time before command are changed[s]
+
+        class ranges:
+            frequencies = [1.5, 2.5]
+            offsets = [0, 1]  # offset is hard to learn
+            # durations = [0.3, 0.8]  # small durations(<0.4) is hard to learn
+            # frequencies = [2, 2]
+            # offsets = [0.5, 0.5]
+            durations = [0.5, 0.5]
+            swing_height = [0.0, 0.1]
+            
     class init_state:
         import os
         robot_type = os.getenv("ROBOT_TYPE")
@@ -106,7 +119,7 @@ class PointFootRoughCfg(BaseConfig):
         if not robot_type:
             print("Error: Please set the ROBOT_TYPE using 'export ROBOT_TYPE=<robot_type>'.")
             sys.exit(1)
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/pointfoot/' + robot_type + '/urdf/robot_with_basket_processed.urdf'
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/pointfoot/' + robot_type + '/urdf/robot.urdf'
         name = robot_type
         foot_name = 'foot'
         terminate_after_contacts_on = ["abad", "base"]
@@ -259,7 +272,7 @@ class PointFootRoughCfgPPO(BaseConfig):
         policy_class_name = 'ActorCritic'
         algorithm_class_name = 'PPO'
         num_steps_per_env = 24  # per iteration
-        max_iterations = 7000  # number of policy updates
+        max_iterations = 100000  # number of policy updates
 
         # logging
         save_interval = 200  # check for potential saves every this many iterations
