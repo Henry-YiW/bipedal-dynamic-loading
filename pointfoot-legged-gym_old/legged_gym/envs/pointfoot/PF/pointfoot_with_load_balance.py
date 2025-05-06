@@ -16,7 +16,7 @@ import numpy as np
 
 import random
 
-class PointFoot:
+class PointFootWithLoadBalance:
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         """ Parses the provided config file,
             calls create_sim() (which creates, simulation, terrain and environments),
@@ -57,6 +57,7 @@ class PointFoot:
         self.num_obs = cfg.env.num_propriceptive_obs
         self.num_privileged_obs = cfg.env.num_privileged_obs
         self.num_actions = cfg.env.num_actions
+        self.num_actors = cfg.env.num_actors
 
         # optimization flags for pytorch JIT
         torch._C._jit_set_profiling_mode(False)
@@ -74,6 +75,13 @@ class PointFoot:
         else:
             self.privileged_obs_buf = None
 
+        # self.num_balls = self.cfg.env.num_balls
+        self.multi_balls = False
+
+
+        self.num_balls = cfg.env.num_actors - 1
+        self.num_obs_load = cfg.env.num_obs_load
+
         self.extras = {}
 
         # create envs, sim and viewer
@@ -84,12 +92,6 @@ class PointFoot:
         self.enable_viewer_sync = True
         self.viewer = None
 
-        self.num_balls = self.cfg.env.num_balls
-        self.multi_balls = False
-
-
-        self.num_balls = cfg.env.num_actors - 1
-        self.num_obs_load = cfg.env.num_obs_load
 
         # if running with a viewer, set up keyboard shortcuts and camera
         if self.headless == False:
@@ -401,13 +403,13 @@ class PointFoot:
     def compute_observations(self):
         """ Computes observations
         """
-        self.obs_buf = self.compute_proprioceptive_observations()
-        self.obs_history_buf = torch.cat((self.obs_history_buf[:, self.obs_buf.shape[1]:], 
-                                          self.obs_buf), dim=1) 
+        self.proprioceptive_obs_buf = self.compute_proprioceptive_observations()
+        self.obs_history_buf = torch.cat((self.obs_history_buf[:, self.proprioceptive_obs_buf.shape[1]:], 
+                                          self.proprioceptive_obs_buf), dim=1) 
         # add noise to proprioceptive observations
         if self.add_noise:
 
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+            self.proprioceptive_obs_buf += (2 * torch.rand_like(self.proprioceptive_obs_buf) - 1) * self.noise_scale_vec
 
         if self.cfg.env.num_privileged_obs is not None:
             self.adapt_observations = torch.cat((
@@ -436,7 +438,7 @@ class PointFoot:
 
             self.privileged_obs_buf = torch.cat((
                     self.base_lin_vel * self.obs_scales.lin_vel,
-                    self.obs_buf,
+                    self.proprioceptive_obs_buf,
                     heights,
                     self.adapt_observations,
                     self.torques,
@@ -565,6 +567,20 @@ class PointFoot:
                 props[s].friction = self.friction_coeffs[env_id]
         return props
 
+    def _process_load_rigid_shape_props(self, props, env_id):
+        """ Randomize the friction coefficient of the load 
+        """
+        friction_coe_range = self.cfg.load_params.friction_coefficient_range
+        props[0].friction = np.random.uniform(friction_coe_range[0], friction_coe_range[1])
+        return props
+    
+    def _process_load_rigid_body_props(self, props, env_id):
+        """ Randomize the load mass
+        """
+        rng = self.cfg.load_params.mass_range
+        props[0].mass = np.random.uniform(rng[0], rng[1])   
+        return props
+    
     def _process_dof_props(self, props, env_id):
         """ Callback allowing to store/change/randomize the DOF properties of each environment.
             Called During environment creation.
@@ -594,40 +610,121 @@ class PointFoot:
                 self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
         return props
 
-    def _process_rigid_body_props(self, props, env_id):
-        """ Process rigid body properties for domain randomization 
+    # def _process_rigid_body_props(self, props, env_id):
+    #     """ Process rigid body properties for domain randomization 
         
-        Modified to handle mass randomization and center of mass (COM) randomization:
-        1. Mass Randomization:
-           - Checks if randomize_base_mass is enabled in config
-           - Uses added_mass_range from config to add random mass
-           - Validates mass range has exactly 2 elements [min, max]
-           - Prints warning if range is invalid
+    #     Modified to handle mass randomization and center of mass (COM) randomization:
+    #     1. Mass Randomization:
+    #        - Checks if randomize_base_mass is enabled in config
+    #        - Uses added_mass_range from config to add random mass
+    #        - Validates mass range has exactly 2 elements [min, max]
+    #        - Prints warning if range is invalid
         
-        2. COM Randomization:
-           - Checks if randomize_base_com is enabled in config
-           - Uses rand_com_vec from config for x,y,z randomization
-           - Adds random offset to COM within specified range
+    #     2. COM Randomization:
+    #        - Checks if randomize_base_com is enabled in config
+    #        - Uses rand_com_vec from config for x,y,z randomization
+    #        - Adds random offset to COM within specified range
            
-        Args:
-            props (List[gymapi.RigidBodyProperties]): Properties of each rigid body
-            env_id (int): Environment id
+    #     Args:
+    #         props (List[gymapi.RigidBodyProperties]): Properties of each rigid body
+    #         env_id (int): Environment id
             
-        Returns:
-            List[gymapi.RigidBodyProperties]: Modified rigid body properties
-        """
-        if self.cfg.domain_rand.randomize_base_mass:
+    #     Returns:
+    #         List[gymapi.RigidBodyProperties]: Modified rigid body properties
+    #     """
+    #     if self.cfg.domain_rand.randomize_base_mass:
+    #         rng = self.cfg.domain_rand.added_mass_range
+    #         if len(rng) == 2:  # Check if range is properly defined
+    #             props[0].mass += np.random.uniform(rng[0], rng[1])
+    #         else:
+    #             print("Warning: Invalid mass randomization range, skipping mass randomization")
+    #     if self.cfg.domain_rand.randomize_base_com:
+    #         com_x, com_y, com_z = self.cfg.domain_rand.rand_com_vec
+    #         props[0].com.x += np.random.uniform(-com_x, com_x)
+    #         props[0].com.y += np.random.uniform(-com_y, com_y)
+    #         props[0].com.z += np.random.uniform(-com_z, com_z)
+    #     return props
+
+    def _process_rigid_body_props(self, props, env_id):
+        # if env_id==0:
+        #     sum = 0
+        #     for i, p in enumerate(props):
+        #         sum += p.mass
+        #         print(f"Mass of body {i}: {p.mass} (before randomization)")
+        #     print(f"Total mass {sum} (before randomization)")
+
+        # randomize base mass
+        if hasattr(self.cfg.domain_rand, 'randomize_base_mass') and self.cfg.domain_rand.randomize_base_mass:
             rng = self.cfg.domain_rand.added_mass_range
-            if len(rng) == 2:  # Check if range is properly defined
-                props[0].mass += np.random.uniform(rng[0], rng[1])
-            else:
-                print("Warning: Invalid mass randomization range, skipping mass randomization")
-        if self.cfg.domain_rand.randomize_base_com:
-            com_x, com_y, com_z = self.cfg.domain_rand.rand_com_vec
-            props[0].com.x += np.random.uniform(-com_x, com_x)
-            props[0].com.y += np.random.uniform(-com_y, com_y)
-            props[0].com.z += np.random.uniform(-com_z, com_z)
-        return props
+            rand_mass = np.random.uniform(rng[0], rng[1], size=(1, ))
+            props[0].mass += np.random.uniform(rng[0], rng[1])
+        else:
+            rand_mass = np.zeros((1, ))
+        # randomize base com
+        if hasattr(self.cfg.domain_rand, 'randomize_base_com') and self.cfg.domain_rand.randomize_base_com:
+            rng_com = self.cfg.domain_rand.added_mass_range
+            rand_com = np.random.uniform(rng_com[0], rng_com[1], size=(3, ))
+            props[0].com += gymapi.Vec3(*rand_com)
+        else:
+            rand_com = np.zeros((3))
+        # randomize base inertia
+        if hasattr(self.cfg.domain_rand, 'randomize_base_inertia') and self.cfg.domain_rand.randomize_base_inertia:
+            rng_inertia_xx = self.cfg.domain_rand.added_inertia_range_xx
+            rng_inertia_xy = self.cfg.domain_rand.added_inertia_range_xy
+            rng_inertia_xz = self.cfg.domain_rand.added_inertia_range_xz
+            rng_inertia_yy = self.cfg.domain_rand.added_inertia_range_yy
+            rng_inertia_zz = self.cfg.domain_rand.added_inertia_range_zz
+            rand_xx = np.random.uniform(rng_inertia_xx[0], rng_inertia_xx[1], size=(1, ))
+            rand_xy = np.random.uniform(rng_inertia_xy[0], rng_inertia_xy[1], size=(1, ))
+            rand_xz = np.random.uniform(rng_inertia_xz[0], rng_inertia_xz[1], size=(1, ))
+            rand_yy = np.random.uniform(rng_inertia_yy[0], rng_inertia_yy[1], size=(1, ))
+            rand_zz = np.random.uniform(rng_inertia_zz[0], rng_inertia_zz[1], size=(1, ))
+            rand_inertia = np.concatenate([rand_xx,rand_xy,rand_xz,rand_yy,np.array([0]),rand_zz])
+            rand_inertia_matrix = gymapi.Mat33() #Mat33 style
+            rand_inertia_matrix.x = gymapi.Vec3(rand_inertia[0],rand_inertia[1],rand_inertia[2])
+            rand_inertia_matrix.y = gymapi.Vec3(rand_inertia[1],rand_inertia[3],rand_inertia[4])
+            rand_inertia_matrix.z = gymapi.Vec3(rand_inertia[2],rand_inertia[4],rand_inertia[5])
+            props[0].inertia.x += rand_inertia_matrix.x
+            props[0].inertia.y += rand_inertia_matrix.y
+            props[0].inertia.z += rand_inertia_matrix.z
+        else:
+            rand_inertia = np.zeros((6))
+
+        # randomize leg mass
+        if hasattr(self.cfg.domain_rand, 'randomize_leg_mass') and self.cfg.domain_rand.randomize_leg_mass:
+            rng_leg = self.cfg.domain_rand.added_leg_mass_range
+            factor_leg_mass = self.cfg.domain_rand.factor_leg_mass_range
+            rand_leg_mass = np.random.uniform(factor_leg_mass[0], factor_leg_mass[1], size=(1, ))
+            for i in range(1,19):
+                props[i].mass *= np.random.uniform(factor_leg_mass[0], factor_leg_mass[1])
+        else:
+            rand_leg_mass = np.zeros((1, ))
+  
+        # randomize leg com
+        if hasattr(self.cfg.domain_rand, 'randomize_leg_com') and self.cfg.domain_rand.randomize_leg_com:
+            rng_leg_com = self.cfg.domain_rand.added_leg_com_range
+            rand_leg_com = np.random.uniform(rng_leg_com[0], rng_leg_com[1], size=(3, ))
+            props[1].com += gymapi.Vec3(*rand_leg_com)
+            props[2].com += gymapi.Vec3(*rand_leg_com)
+            props[3].com += gymapi.Vec3(*rand_leg_com)
+
+            props[5].com += gymapi.Vec3(*rand_leg_com)
+            props[6].com += gymapi.Vec3(*rand_leg_com)
+            props[7].com += gymapi.Vec3(*rand_leg_com)
+
+            props[11].com += gymapi.Vec3(*rand_leg_com)
+            props[12].com += gymapi.Vec3(*rand_leg_com)
+            props[13].com += gymapi.Vec3(*rand_leg_com)
+
+            props[15].com += gymapi.Vec3(*rand_leg_com)
+            props[16].com += gymapi.Vec3(*rand_leg_com)
+            props[17].com += gymapi.Vec3(*rand_leg_com)
+        else:
+            rand_leg_com = np.zeros((3))
+
+        mass_params = np.concatenate([rand_mass, rand_com, rand_inertia])
+        leg_params =  np.concatenate([rand_leg_mass, rand_leg_com])
+        return props, mass_params, leg_params
 
     def _post_physics_step_callback(self):
         """ Callback called before computing terminations, rewards, and observations
@@ -948,7 +1045,7 @@ class PointFoot:
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1,
                                                                             3)  # shape: num_envs, num_bodies, xyz axis
         
-        if self.cfg.domain_rand.randomize_action_delay:
+        if hasattr(self.cfg.domain_rand, 'randomize_action_delay') and self.cfg.domain_rand.randomize_action_delay:
             action_delay_idx = torch.round(
                 torch_rand_float(
                     self.cfg.domain_rand.delay_ms_range[0] / 1000 / self.sim_params.dt,
@@ -987,7 +1084,7 @@ class PointFoot:
             (self.num_envs, 1))
         self.forward_vec = to_torch([1., 0., 0.], device=self.device).repeat((self.num_envs, 1))
 
-        self.obs_history_buf = torch.zeros(self.num_envs, self.cfg.env.obs_history_length * self.obs_buf.shape[-1], 
+        self.obs_history_buf = torch.zeros(self.num_envs, self.cfg.env.obs_history_length * self.proprioceptive_obs_buf.shape[-1], 
                                            dtype=torch.float, device=self.device)
         self.load_observations = torch.zeros(self.num_envs, 8, dtype=torch.float, device=self.device)
 
@@ -1194,14 +1291,16 @@ class PointFoot:
 
         robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
         self.num_dof = self.gym.get_asset_dof_count(robot_asset)
-        self.num_bodies = self.gym.get_asset_rigid_body_count(robot_asset)
+        self.num_bodies = self.gym.get_asset_rigid_body_count(robot_asset) + self.num_balls
+        print("self.num_bodies: ", self.num_bodies)
         dof_props_asset = self.gym.get_asset_dof_properties(robot_asset)
         rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(robot_asset)
 
         # save body names from the asset
         body_names = self.gym.get_asset_rigid_body_names(robot_asset)
         self.dof_names = self.gym.get_asset_dof_names(robot_asset)
-        self.num_bodies = len(body_names)
+        self.num_bodies = len(body_names) + self.num_balls
+        print("self.num_bodies 2: ", self.num_bodies)
         self.num_dofs = len(self.dof_names)
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
         penalized_contact_names = []
@@ -1359,7 +1458,8 @@ class PointFoot:
         """
         if self.cfg.terrain.mesh_type in ["heightfield", "trimesh"]:
             self.custom_origins = True
-            self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
+            self.env_origins = torch.zeros(self.num_envs,
+                self.num_actors, 3, device=self.device, requires_grad=False)
             # put robots at the origins defined by the terrain
             max_init_level = self.cfg.terrain.max_init_terrain_level
             if not self.cfg.terrain.curriculum: max_init_level = self.cfg.terrain.num_rows - 1
@@ -1372,7 +1472,8 @@ class PointFoot:
             self.env_origins[:, 0, :] = self.terrain_origins[self.terrain_levels, self.terrain_types]
         else:
             self.custom_origins = False
-            self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
+            self.env_origins = torch.zeros(self.num_envs, 
+                self.num_actors, 3, device=self.device, requires_grad=False)
             # create a grid of robots
             num_cols = np.floor(np.sqrt(self.num_envs))
             num_rows = np.ceil(self.num_envs / num_cols)
@@ -1638,3 +1739,70 @@ class PointFoot:
 
     def _reward_survival(self):
         return (~self.reset_buf).float() * self.dt
+
+    # def _reward_symmetry_feet_force(self):
+    #     # penalize laterally nonsymmetric feet contact forces
+    #     # Body names: ['base',
+    #     # 'FL_hip', 'FL_thigh', 'FL_calf', 'FL_foot',
+    #     # 'FR_hip', 'FR_thigh', 'FR_calf', 'FR_foot',
+    #     # 'Head_upper', 'Head_lower',
+    #     # 'RL_hip', 'RL_thigh', 'RL_calf', 'RL_foot',
+    #     # 'RR_hip', 'RR_thigh', 'RR_calf', 'RR_foot']
+    #     # feet_indices: tensor([ 4,  8, 14, 18], device='cuda:0')
+
+    #     fl_foot_force = self.contact_forces[:, 4, :]
+    #     rl_foot_force = self.contact_forces[:, 14, :]
+    #     fr_foot_force = self.contact_forces[:, 8, :]
+    #     rr_foot_force = self.contact_forces[:, 18, :]
+    #     return torch.sum(torch.square(fl_foot_force - fr_foot_force) + torch.square(rl_foot_force - rr_foot_force), dim=1)
+
+    def _reward_ball_lin_vel(self):
+        """ Penalize the ball's linear velocity """
+        tot_ball_vel_rew = 0
+
+        if self.multi_balls:
+            for i in range(self.num_balls):
+                # 相对机器人的速度
+                ball_vel = torch.norm(quat_rotate_inverse(self.base_quat,(self.ball_linvels[:,i,:]- 
+                                                                        self.root_states[:, 0, 7:10])), dim=1)
+                tot_ball_vel_rew += 1.0/(1. + ball_vel)
+            return tot_ball_vel_rew
+        else:
+            # 相对机器人的速度
+            ball_vel = torch.norm(quat_rotate_inverse(self.base_quat,(self.root_states[:, 1, 7:10]- 
+                                                                    self.root_states[:, 0, 7:10])), dim=1)
+            tot_ball_vel_rew += 1.0/(1. + ball_vel)
+            return tot_ball_vel_rew
+
+
+    # def _reward_ball_ang_vel(self):
+    #     """ Penalize the ball's angular velocity """
+    #     ball_ang_vel = torch.norm(self.ball_angvels, dim=1)
+    #     return torch.square(ball_ang_vel)
+    
+    def _reward_ball_dist(self):
+        """ Penalize the ball's distance from the robot """
+        tot_ball_dist_rew = 0
+        if self.multi_balls:
+            for i in range(self.num_balls):
+                ball_dist = torch.norm(self.ball_positions[:,i,:] - self.root_states[:, 0, :3], dim=1)
+                tot_ball_dist_rew += 1.0/(1.0 + ball_dist)
+            return tot_ball_dist_rew
+
+        else:
+            ball_dist = torch.norm(self.root_states[:,1,0:3] - self.root_states[:, 0, :3], dim=1)
+            tot_ball_dist_rew += 1.0/(1.0 + ball_dist)
+            return tot_ball_dist_rew
+
+    ############# load wrenches related rewards #############
+    # def _reward_wrench_smoothness(self):
+    #     """ Penalize the wrench smoothness """
+    #     return torch.sum(torch.square(self.wrenches_on_robot - self.last_wrenches_on_robot), dim=1)
+
+    def _reward_power(self):
+        # Penalize power
+        return torch.sum(torch.square(self.torques * self.dof_vel), dim=1)
+    
+    def _reward_action_smoothness(self):
+        # Penalize changes in actions
+        return torch.sum(torch.square(self.actions - 2.* self.last_actions - self.last_last_actions), dim=1)

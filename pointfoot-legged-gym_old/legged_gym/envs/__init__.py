@@ -54,8 +54,10 @@ task_registry.register("a1", LeggedRobot, A1RoughCfg(), A1RoughCfgPPO())
 task_registry.register("cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO())
 if robot_type.startswith("PF"):
     from .pointfoot.PF.pointfoot import PointFoot
+    from .pointfoot.PF.pointfoot_with_load_balance import PointFootWithLoadBalance
     from .pointfoot.mixed_terrain.pointfoot_rough_config import PointFootRoughCfg, PointFootRoughCfgPPO
     from .pointfoot.flat.PF.pointfoot_flat_config import PointFootFlatCfg, PointFootFlatCfgPPO
+    from .pointfoot.mixed_terrain.pointfoot_rough_with_load_balance_config import PointFootRoughWithLoadBalanceCfg, PointFootRoughWithLoadBalanceCfgPPO
     from .pointfoot.PF.pointfoot_with_load import PointFootWithLoad
     from .pointfoot.PF.pointfoot_with_load_config import PointFootWithLoadCfg, PointFootWithLoadCfgPPO
     #for ball balance
@@ -63,6 +65,7 @@ if robot_type.startswith("PF"):
     from .pointfoot.PF.pointfoot_ball_balance_config import PointFootBallBalanceCfg, PointFootBallBalanceCfgPPO
     
     task_registry.register("pointfoot_rough", PointFoot, PointFootRoughCfg(), PointFootRoughCfgPPO())
+    task_registry.register("pointfoot_rough_load", PointFootWithLoadBalance, PointFootRoughWithLoadBalanceCfg(), PointFootRoughWithLoadBalanceCfgPPO())
     task_registry.register("pointfoot_flat", PointFoot, PointFootFlatCfg(), PointFootFlatCfgPPO())
     print("Registering pointfoot_with_load environment!")
     task_registry.register("pointfoot_with_load", PointFootWithLoad, PointFootWithLoadCfg(), PointFootWithLoadCfgPPO())
