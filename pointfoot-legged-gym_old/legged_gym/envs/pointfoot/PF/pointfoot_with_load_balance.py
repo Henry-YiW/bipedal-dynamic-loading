@@ -140,7 +140,7 @@ class PointFootWithLoadBalance:
     def reset(self):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
-        obs, privileged_obs, _, _, _ = self.step(
+        obs, privileged_obs, _, _, _, _, _ = self.step(
             torch.zeros(self.num_envs, self.num_actions, device=self.device, requires_grad=False))
         return obs, privileged_obs
 
@@ -409,12 +409,18 @@ class PointFootWithLoadBalance:
         # add noise to proprioceptive observations
         if self.add_noise:
 
-            self.proprioceptive_obs_buf += (2 * torch.rand_like(self.proprioceptive_obs_buf) - 1) * self.noise_scale_vec
+            self.proprioceptive_obs_buf += (2 * torch.rand_like(self.proprioceptive_obs_buf) - 1) * self.noise_scale_vec[0]
 
         if self.cfg.env.num_privileged_obs is not None:
+            print(f"self.p_gains shape: {self.p_gains.shape}")
+            print(f"self.d_gains shape: {self.d_gains.shape}")
+            print(f"self.friction_coeffs_tensor shape: {self.friction_coeffs_tensor.shape}")
+            print(f"self.leg_params_tensor shape: {self.leg_params_tensor.shape}")
+            print(f"self.mass_params_tensor shape: {self.mass_params_tensor.shape}")
+            print(f"self.motor_strength shape: {self.motor_strength.shape}")
             self.adapt_observations = torch.cat((
-                                        self.p_gains,#12
-                                        self.d_gains,#12
+                                        self.p_gains.expand(self.num_envs, -1),#12
+                                        self.d_gains.expand(self.num_envs, -1),#12
                                         self.friction_coeffs_tensor,#1
                                         self.leg_params_tensor,#4
                                         self.mass_params_tensor,#10
@@ -498,7 +504,7 @@ class PointFootWithLoadBalance:
     #             f"obs_buf size ({self.proprioceptive_obs_buf.shape[1]}) does not match num_obs ({self.num_obs})")
 
     def _add_height_measure_to_buf(self, buf):
-        heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
+        heights = torch.clip(self.root_states[:, 0, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
                              1.) * self.obs_scales.height_measurements
         buf = torch.cat(
             (buf, heights), dim=-1
@@ -1103,7 +1109,7 @@ class PointFootWithLoadBalance:
             device=self.device,
             requires_grad=False)
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
-        self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
+        self.last_root_vel = torch.zeros_like(self.root_states[:, 0, 7:13])
         self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float,
                                     device=self.device, requires_grad=False)  # x vel, y vel, yaw vel, heading
         self.commands_scale = torch.tensor([self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel],
@@ -1631,7 +1637,7 @@ class PointFootWithLoadBalance:
 
     def _reward_base_height(self):
         # Penalize base height away from target
-        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+        base_height = torch.mean(self.root_states[:, 0, 2].unsqueeze(1) - self.measured_heights, dim=1)
         return torch.square(base_height - self.cfg.rewards.base_height_target)
 
     def _reward_torques(self):

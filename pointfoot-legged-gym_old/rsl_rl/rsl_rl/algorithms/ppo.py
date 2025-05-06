@@ -52,7 +52,9 @@ class PPO:
                  schedule="fixed",
                  desired_kl=0.01,
                  device='cpu',
-                 ):
+                 use_grpo=False,
+                 alpha=1.0,
+                 regularization_type='kl'):
 
         self.device = device
 
@@ -77,6 +79,11 @@ class PPO:
         self.lam = lam
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
+        self.use_grpo = use_grpo
+
+
+        self.alpha = alpha
+        self.regularization_type = regularization_type
 
     def init_storage(self, num_envs, num_transitions_per_env, actor_obs_shape, critic_obs_shape, action_shape):
         self.storage = RolloutStorage(num_envs, num_transitions_per_env, actor_obs_shape, critic_obs_shape, action_shape, self.device)
@@ -150,14 +157,30 @@ class PPO:
                         for param_group in self.optimizer.param_groups:
                             param_group['lr'] = self.learning_rate
 
+                if not self.use_grpo:
+                    # Surrogate loss
+                    ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
+                    surrogate = -torch.squeeze(advantages_batch) * ratio
+                    surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
+                                                                                    1.0 + self.clip_param)
+                    surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
 
-                # Surrogate loss
-                ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
-                surrogate = -torch.squeeze(advantages_batch) * ratio
-                surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
-                                                                                1.0 + self.clip_param)
-                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
+                else:
+                    # GRPO
+                    log_ratio = actions_log_prob_batch - old_actions_log_prob_batch.squeeze()
+                    if self.regularization_type == 'kl':
+                        reg = log_ratio.exp() * log_ratio
+                    elif self.regularization_type == 'reverse_kl':
+                        reg = -log_ratio
+                    elif self.regularization_type == 'chi2':
+                        ratio = log_ratio.exp()
+                        reg = (ratio - 1) ** 2
+                    else:
+                        raise NotImplementedError(f"Unsupported regularization type: {self.regularization_type}")
 
+                    surrogate_loss = -(advantages_batch.squeeze() * log_ratio - self.alpha * reg).mean()
+                    # print('GRPO loss: ', surrogate_loss)
+            
                 # Value function loss
                 if self.use_clipped_value_loss:
                     value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(-self.clip_param,

@@ -254,6 +254,9 @@ class PointFootRoughCfgPPO(BaseConfig):
         lam = 0.95
         desired_kl = 0.01
         max_grad_norm = 1.
+        use_grpo = True
+        alpha = 1.0
+        regularization_type = 'kl'
 
     class runner:
         policy_class_name = 'ActorCritic'

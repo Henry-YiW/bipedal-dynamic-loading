@@ -4,7 +4,7 @@ class PointFootRoughWithLoadBalanceCfg(BaseConfig):
     class env:
         num_envs = 256
         num_propriceptive_obs = 27
-        num_privileged_obs = 148  # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
+        num_privileged_obs = 208  # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 6
         env_spacing = 3.  # not used with heightfields/trimeshes
         send_timeouts = True  # send time out information to the algorithm
@@ -26,6 +26,7 @@ class PointFootRoughWithLoadBalanceCfg(BaseConfig):
         # rough terrain only:
         measure_heights_actor = False
         measure_heights_critic = True
+        measure_heights = True
         measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4,
                              0.5]  # 1mx1m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
@@ -151,6 +152,9 @@ class PointFootRoughWithLoadBalanceCfg(BaseConfig):
 
         randomize_action_delay = True
         delay_ms_range = [0, 10] # ms
+
+        randomize_motor = True
+        motor_strength_range = [0.8, 1.2]
 
     class load_params:
         mass_range = [0.1, 8]
