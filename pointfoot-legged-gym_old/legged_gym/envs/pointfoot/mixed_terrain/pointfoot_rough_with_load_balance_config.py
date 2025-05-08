@@ -12,7 +12,7 @@ class PointFootRoughWithLoadBalanceCfg(BaseConfig):
 
         num_actors = 2 # 3 actors: 1 robot and 2 balls
         obs_history_length = 15  # number of observations to stack
-        num_obs_load = 8  # number of observations of load
+        num_load_obs = 8  # number of observations of load
 
     class terrain:
         mesh_type = 'trimesh'  # "heightfield" # none, plane, heightfield or trimesh

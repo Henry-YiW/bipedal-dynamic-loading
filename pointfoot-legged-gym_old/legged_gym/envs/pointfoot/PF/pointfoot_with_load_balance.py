@@ -80,7 +80,8 @@ class PointFootWithLoadBalance:
 
 
         self.num_balls = cfg.env.num_actors - 1
-        self.num_obs_load = cfg.env.num_obs_load
+        self.num_load_obs = cfg.env.num_load_obs
+        self.obs_history_length = cfg.env.obs_history_length
 
         self.extras = {}
 
@@ -412,20 +413,20 @@ class PointFootWithLoadBalance:
             self.proprioceptive_obs_buf += (2 * torch.rand_like(self.proprioceptive_obs_buf) - 1) * self.noise_scale_vec[0]
 
         if self.cfg.env.num_privileged_obs is not None:
-            print(f"self.p_gains shape: {self.p_gains.shape}")
-            print(f"self.d_gains shape: {self.d_gains.shape}")
-            print(f"self.friction_coeffs_tensor shape: {self.friction_coeffs_tensor.shape}")
-            print(f"self.leg_params_tensor shape: {self.leg_params_tensor.shape}")
-            print(f"self.mass_params_tensor shape: {self.mass_params_tensor.shape}")
-            print(f"self.motor_strength shape: {self.motor_strength.shape}")
+            # print(f"self.p_gains shape: {self.p_gains.shape}")
+            # print(f"self.d_gains shape: {self.d_gains.shape}")
+            # print(f"self.friction_coeffs_tensor shape: {self.friction_coeffs_tensor.shape}")
+            # print(f"self.leg_params_tensor shape: {self.leg_params_tensor.shape}")
+            # print(f"self.mass_params_tensor shape: {self.mass_params_tensor.shape}")
+            # print(f"self.motor_strength shape: {self.motor_strength.shape}")
             self.adapt_observations = torch.cat((
-                                        self.p_gains.expand(self.num_envs, -1),#12
-                                        self.d_gains.expand(self.num_envs, -1),#12
+                                        self.p_gains.expand(self.num_envs, -1),#6
+                                        self.d_gains.expand(self.num_envs, -1),#6
                                         self.friction_coeffs_tensor,#1
                                         self.leg_params_tensor,#4
                                         self.mass_params_tensor,#10
-                                        self.motor_strength[0] - 1, #12
-                                        self.motor_strength[1] - 1 #12
+                                        self.motor_strength[0] - 1, #6
+                                        self.motor_strength[1] - 1 #6
                                         ),dim=-1)
             
             self.load_observations = torch.cat((
