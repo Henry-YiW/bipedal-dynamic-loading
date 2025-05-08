@@ -38,7 +38,6 @@ class PointFootWithLoadBalance:
         self._parse_cfg()
         self.gym = gymapi.acquire_gym()
 
-        self.sim_params = sim_params
         self.physics_engine = physics_engine
         self.sim_device = sim_device
         sim_device_type, self.sim_device_id = gymutil.parse_device_str(self.sim_device)
@@ -923,6 +922,8 @@ class PointFootWithLoadBalance:
                 * self.cfg.domain_rand.max_push_vel_xy
                 / self.sim_params.dt
         )
+
+        # max_vel = self.cfg.domain_rand.max_push_vel_xy
         self.rigid_body_external_forces[:] = 0
         rigid_body_external_forces = torch_rand_float(
             -max_push_force, max_push_force, (self.num_envs, 3), device=self.device
@@ -1323,9 +1324,9 @@ class PointFootWithLoadBalance:
         # start_pose.p = gymapi.Vec3(*self.base_init_state[:3])
 
         # # Do we need this?
-        # self.base_mass = torch.zeros(
-        #     self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
-        # )
+        self.base_mass = torch.zeros(
+            self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
+        )
         
 
         ball_init_state_list = self.cfg.ball_init_state.pos + self.cfg.ball_init_state.rot + \
