@@ -76,6 +76,7 @@ class PointFootWithLoadBalance:
 
         # self.num_balls = self.cfg.env.num_balls
         self.multi_balls = False
+        self.has_ball = False
 
 
         self.num_balls = cfg.env.num_actors - 1
@@ -222,7 +223,7 @@ class PointFootWithLoadBalance:
             self.ball_orientations = self.root_states[:, 1:, 3:7]
             self.ball_linvels = self.root_states[:, 1:, 7:10]
             self.ball_angvels = self.root_states[:, 1:, 10:13]
-        else:
+        elif self.has_ball:
             self.ball_positions = self.root_states[:, 1, 0:3]
             self.ball_orientations = self.root_states[:, 1, 3:7]
             self.ball_linvels = self.root_states[:, 1, 7:10]
@@ -289,7 +290,7 @@ class PointFootWithLoadBalance:
                 # print(f"xy_too_large!!!!!: {xy_too_large}")
 
                 self.reset_buf |= xy_too_large
-        else:
+        elif self.has_ball:
             ball_x = self.root_states[:, 1, 0]
             ball_y = self.root_states[:, 1, 1]
             base_x = self.root_states[:, 0, 0]
@@ -363,15 +364,16 @@ class PointFootWithLoadBalance:
     def update_load_state_buffer(self):
         ''' Update the load states buffer
         '''
-        current_load_state = torch.cat((quat_rotate_inverse(self.base_quat, self.ball_positions - self.base_positions), # 小球相对于机器人的位置
-                                  quat_rotate_inverse(self.base_quat, self.ball_linvels - self.root_states[:, 0, 7:10]), # 小球的相对机器人的线速度
-                                  self.load_mass.unsqueeze(1),
-                                  self.load_friction.unsqueeze(1),
-                                    ), dim=-1)
-        
-        # 更新缓冲区，保存过去20帧的wrench, 0-20 由旧到新, 最末端是最新的
-        self.load_state_buffer = torch.roll(self.load_state_buffer, shifts=-1, dims=1)
-        self.load_state_buffer[:, -1, :] = current_load_state
+        if self.has_ball:
+            current_load_state = torch.cat((quat_rotate_inverse(self.base_quat, self.ball_positions - self.base_positions), # 小球相对于机器人的位置
+                                    quat_rotate_inverse(self.base_quat, self.ball_linvels - self.root_states[:, 0, 7:10]), # 小球的相对机器人的线速度
+                                    self.load_mass.unsqueeze(1),
+                                    self.load_friction.unsqueeze(1),
+                                        ), dim=-1)
+            
+            # 更新缓冲区，保存过去20帧的wrench, 0-20 由旧到新, 最末端是最新的
+            self.load_state_buffer = torch.roll(self.load_state_buffer, shifts=-1, dims=1)
+            self.load_state_buffer[:, -1, :] = current_load_state
 
     def compute_reward(self):
         """ Compute rewards
@@ -427,17 +429,17 @@ class PointFootWithLoadBalance:
                                         self.motor_strength[0] - 1, #6
                                         self.motor_strength[1] - 1 #6
                                         ),dim=-1)
-            
-            self.load_observations = torch.cat((
-                                    quat_rotate_inverse(self.base_quat, 
-                                                        self.ball_positions - self.base_positions), # 小球相对于机器人的位置
-                                    quat_rotate_inverse(self.base_quat, 
-                                                        self.ball_linvels - self.root_states[:, 0, 7:10]), # 小球的相对机器人的线速度
-                                    self.load_mass.unsqueeze(1),
-                                    self.load_friction.unsqueeze(1),
-                                    ), dim=-1)
-            valid_indices = self.load_observations[:,6] > 0.1
-            self.load_observations[~valid_indices] = 0.
+            if self.has_ball:
+                self.load_observations = torch.cat((
+                                        quat_rotate_inverse(self.base_quat, 
+                                                            self.ball_positions - self.base_positions), # 小球相对于机器人的位置
+                                        quat_rotate_inverse(self.base_quat, 
+                                                            self.ball_linvels - self.root_states[:, 0, 7:10]), # 小球的相对机器人的线速度
+                                        self.load_mass.unsqueeze(1),
+                                        self.load_friction.unsqueeze(1),
+                                        ), dim=-1)
+                valid_indices = self.load_observations[:,6] > 0.1
+                self.load_observations[~valid_indices] = 0.
             
             if self.cfg.terrain.measure_heights:
                 heights = torch.clip(self.root_states[:,0, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
@@ -871,7 +873,7 @@ class PointFootWithLoadBalance:
                                                         (len(env_ids),
                                                         6),
                                                         device=self.device) # 定义小球初始速度
-        else:
+        elif self.has_ball:
             self.root_states[env_ids, 1,:] = self.ball_init_state[env_ids]  # ball init
             self.root_states[env_ids, 
                                 1,
@@ -1157,7 +1159,7 @@ class PointFootWithLoadBalance:
             self.ball_orientations = self.root_states[..., 1:, 3:7] # (num_envs, num_balls, 3)
             self.ball_linvels = self.root_states[..., 1:, 7:10] # (num_envs, num_balls, 3)
             self.ball_angvels = self.root_states[..., 1:, 10:13] # (num_envs, num_balls, 3)
-        else:    
+        elif self.has_ball:    
             self.ball_positions = self.root_states[..., 1, 0:3] # (num_envs, num_balls, 3)
             self.ball_orientations = self.root_states[..., 1, 3:7] # (num_envs, num_balls, 3)
             self.ball_linvels = self.root_states[..., 1, 7:10] # (num_envs, num_balls, 3)
@@ -1406,37 +1408,39 @@ class PointFootWithLoadBalance:
 
 
 
-            # Ball additions to the envs and set friction properties
-            load_rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(
-                ball_asset)
-            load_rigid_shape_props = self._process_load_rigid_shape_props(
-                load_rigid_shape_props_asset, i)
-            self.gym.set_asset_rigid_shape_properties(
-                ball_asset, load_rigid_shape_props)
-            self.load_friction[i] = load_rigid_shape_props[0].friction
-                   
-            start_pose_ball = gymapi.Transform()
-            start_pose_ball.p = gymapi.Vec3(
-                pos[0], pos[1], pos[2] + self.load_radius + 0.01)
+            if self.cfg.env.num_actors > 1:
+                # Ball additions to the envs and set friction properties
+                load_rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(
+                    ball_asset)
+                load_rigid_shape_props = self._process_load_rigid_shape_props(
+                    load_rigid_shape_props_asset, i)
+                self.gym.set_asset_rigid_shape_properties(
+                    ball_asset, load_rigid_shape_props)
+                self.load_friction[i] = load_rigid_shape_props[0].friction
+                    
+                start_pose_ball = gymapi.Transform()
+                start_pose_ball.p = gymapi.Vec3(
+                    pos[0], pos[1], pos[2] + self.load_radius + 0.01)
             
-            # Create ball instance
-            ball_handle = self.gym.create_actor(
-                env_handle, ball_asset, start_pose_ball, 'ball', i, 0, 0)
-            num_actors = self.gym.get_actor_count(env_handle)
-            assert num_actors == self.cfg.env.num_actors, f"number of actors in the environment {i} is {num_actors}, expected {self.cfg.env.num_actors}"
+                # Create ball instance
+                ball_handle = self.gym.create_actor(
+                    env_handle, ball_asset, start_pose_ball, 'ball', i, 0, 0)
+                num_actors = self.gym.get_actor_count(env_handle)
+                assert num_actors == self.cfg.env.num_actors, f"number of actors in the environment {i} is {num_actors}, expected {self.cfg.env.num_actors}"
 
-            # Get and process rigid body (ball or cube) properties mass
-            load_props = self.gym.get_actor_rigid_body_properties(
-                env_handle, ball_handle)
-            load_props = self._process_load_rigid_body_props(load_props, i)
-            self.gym.set_actor_rigid_body_properties(
-                env_handle, ball_handle, load_props, recomputeInertia=True)
+                # Get and process rigid body (ball or cube) properties mass
+                load_props = self.gym.get_actor_rigid_body_properties(
+                    env_handle, ball_handle)
+                load_props = self._process_load_rigid_body_props(load_props, i)
+                self.gym.set_actor_rigid_body_properties(
+                    env_handle, ball_handle, load_props, recomputeInertia=True)
             
-            self.load_mass[i] = load_props[0].mass
+                self.load_mass[i] = load_props[0].mass
+                self.load_handles.append(ball_handle)
+                self.has_ball = True
             
             self.envs.append(env_handle)
             self.actor_handles.append(actor_handle)
-            self.load_handles.append(ball_handle)
 
         if self.cfg.domain_rand.randomize_friction:
             self.friction_coeffs_tensor = self.friction_coeffs.to(self.device).to(torch.float).squeeze(-1)
@@ -1775,12 +1779,14 @@ class PointFootWithLoadBalance:
                                                                         self.root_states[:, 0, 7:10])), dim=1)
                 tot_ball_vel_rew += 1.0/(1. + ball_vel)
             return tot_ball_vel_rew
-        else:
+        elif self.has_ball:
             # 相对机器人的速度
             ball_vel = torch.norm(quat_rotate_inverse(self.base_quat,(self.root_states[:, 1, 7:10]- 
                                                                     self.root_states[:, 0, 7:10])), dim=1)
             tot_ball_vel_rew += 1.0/(1. + ball_vel)
             return tot_ball_vel_rew
+        else:
+            return 0
 
 
     # def _reward_ball_ang_vel(self):
@@ -1797,10 +1803,12 @@ class PointFootWithLoadBalance:
                 tot_ball_dist_rew += 1.0/(1.0 + ball_dist)
             return tot_ball_dist_rew
 
-        else:
+        elif self.has_ball:
             ball_dist = torch.norm(self.root_states[:,1,0:3] - self.root_states[:, 0, :3], dim=1)
             tot_ball_dist_rew += 1.0/(1.0 + ball_dist)
             return tot_ball_dist_rew
+        else:
+            return 0
 
     ############# load wrenches related rewards #############
     # def _reward_wrench_smoothness(self):

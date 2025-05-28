@@ -189,7 +189,7 @@ class PointFootRoughWithLoadBalanceCfg(BaseConfig):
 
             # ball related
             # symmetry_feet_force = -0.1
-            ball_lin_vel = 2
+            # ball_lin_vel = 2
             # ball_ang_vel = -1.
             # ball_dist = 0.05
 

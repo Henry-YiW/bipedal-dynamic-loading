@@ -2,7 +2,7 @@ from legged_gym.envs.base.base_config import BaseConfig
 
 class PointFootRoughCfg(BaseConfig):
     class env:
-        num_envs = 256
+        num_envs = 8192
         num_propriceptive_obs = 27
         num_privileged_obs = 148  # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 6
@@ -254,9 +254,6 @@ class PointFootRoughCfgPPO(BaseConfig):
         lam = 0.95
         desired_kl = 0.01
         max_grad_norm = 1.
-        use_grpo = True
-        alpha = 1.0
-        regularization_type = 'kl'
 
     class runner:
         policy_class_name = 'ActorCritic'
